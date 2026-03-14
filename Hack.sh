@@ -46,10 +46,11 @@ print_header() {
 }
 
 # --- Опция 1: Информация по IP ---
+# --- Опция 1: Информация по IP (с "точными" координатами) ---
 ip_info() {
     clear
     print_header
-    echo -e "${BOLD}${GREEN}[ ОПЦИЯ 1: ДЕТАЛЬНЫЙ ПРОБИВ ПО IP ]${NC}"
+    echo -e "${BOLD}${GREEN}[ ОПЦИЯ 1: ПРОБИВ ПО IP С КООРДИНАТАМИ ]${NC}"
     read -p "Введи IP-адрес: " target_ip
     if [[ -z "$target_ip" ]]; then
         echo -e "${RED}[!] IP не введен.${NC}"
@@ -58,15 +59,59 @@ ip_info() {
     fi
 
     echo -e "${YELLOW}[*] Запрос WHOIS информации...${NC}"
-    whois $target_ip | grep -E 'netname|descr|country|origin|mnt-by|created|last-modified|inetnum' | head -20 | sed 's/^/  /'
+    whois $target_ip | grep -E 'netname|descr|country|origin|mnt-by|created|last-modified|inetnum|address' | head -25 | sed 's/^/  /'
 
-    echo -e "\n${YELLOW}[*] Геолокация (ip-api.com)...${NC}"
-    # Используем русский вывод через параметр lang=ru в API
-    curl -s "http://ip-api.com/json/$target_ip?lang=ru&fields=66846719" | jq '.' 2>/dev/null || echo -e "${RED}Ошибка парсинга JSON. Установи jq.${NC}"
+    echo -e "\n${YELLOW}[*] ГЕОЛОКАЦИЯ (ip-api.com) - ТУТ БУДУТ ТВОИ КООРДИНАТЫ, ПЕТУХ:${NC}"
+    
+    # Сохраняем JSON ответ
+    json_response=$(curl -s "http://ip-api.com/json/$target_ip?fields=66846719&lang=ru")
+    
+    # Парсим и выводим ВСЕ поля красиво
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo "$json_response" | jq -r '
+        if .status == "success" then
+            "  Страна: " + (.country // "Нет данных") +
+            "\n  Регион: " + (.regionName // "Нет данных") +
+            "\n  Город: " + (.city // "Нет данных") +
+            "\n  Район: " + (.district // "Нет данных") +
+            "\n  Почтовый индекс: " + (.zip // "Нет данных") +
+            "\n  Широта: " + (.lat | tostring // "Нет данных") +
+            "\n  Долгота: " + (.lon | tostring // "Нет данных") +
+            "\n  Точность: " + .accuracy + " км" +
+            "\n  Провайдер: " + (.isp // "Нет данных") +
+            "\n  Организация: " + (.org // "Нет данных") +
+            "\n  AS: " + (.as // "Нет данных")
+        else
+            "  ОШИБКА: " + (.message // "Неизвестная ошибка")
+        end
+    ' 2>/dev/null || echo -e "${RED}  Ошибка парсинга JSON. Установи jq, мудак.${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
 
-    echo -e "\n${YELLOW}[*] Обратное DNS имя...${NC}"
-    nslookup $target_ip 2>/dev/null | grep 'name =' | sed 's/^/  /'
+    echo -e "\n${YELLOW}[*] ССЫЛКИ НА КАРТЫ (для просмотра местоположения):${NC}"
+    
+    # Вытаскиваем координаты для ссылок
+    lat=$(echo "$json_response" | jq -r '.lat // 0' 2>/dev/null)
+    lon=$(echo "$json_response" | jq -r '.lon // 0' 2>/dev/null)
+    
+    if [[ "$lat" != "0" && "$lon" != "0" ]]; then
+        echo -e "${BLUE}  Google Maps: https://www.google.com/maps?q=$lat,$lon${NC}"
+        echo -e "${BLUE}  Яндекс Карты: https://yandex.ru/maps/?ll=$lon,$lat&z=17&pt=$lon,$lat${NC}"
+        echo -e "${BLUE}  2GIS (если есть город): https://2gis.ru/geo/$lon,$lat${NC}"
+        
+        echo -e "\n${YELLOW}[*] ПРИМЕРНЫЙ АДРЕС (если повезет):${NC}"
+        # Пробуем получить адрес через обратную геолокацию (OpenStreetMap)
+        address=$(curl -s "https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lon&zoom=18&addressdetails=1" | jq -r '.display_name // "Не удалось определить"' 2>/dev/null)
+        echo -e "${WHITE}  $address${NC}"
+    else
+        echo -e "${RED}  Координаты не определены, ссылки не сгенерировать${NC}"
+    fi
 
+    echo -e "\n${YELLOW}[*] ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ:${NC}"
+    echo -e "${PURPLE}  Обратное DNS имя:${NC} $(nslookup $target_ip 2>/dev/null | grep 'name =' | cut -d '=' -f2 | sed 's/^ //' | head -1 || echo 'Не найдено')"
+    
+    # Проверка на прокси/VPN
+    echo -e "${PURPLE}  Прокси/VPN детект:${NC} $(curl -s "https://ipqualityscore.com/api/json/ip/ТУТ_НУЖЕН_КЛЮЧ/$target_ip" 2>/dev/null | jq -r '.proxy // "Не проверено"' 2>/dev/null || echo 'Нет ключа API')"
+    
     press_enter_to_menu
 }
 
